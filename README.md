@@ -25,6 +25,9 @@ Image | Video | Webcam
 * [2023.09.25] The above checkpoint is now available with `--mode base-nightly` argument. `--fast` argument is deprecated. Use `--mode [MODE]` instead. `--mode` argument supports `base`, `fast` and `base-nightly`. Note that `base-nightly` can be changed without any notice.
 * [2023.10.19] Webcam support is not stable currently. We remove the dependency for the latest release. Install with extra dependency option `pip install transparent-background[webcam]` if you want to use webcam input.
 * [2024.02.14] I added a [github sponsor badge](https://github.com/sponsors/plemeri). Please help maintaining this project if you think this package is useful!
+* [2024.02.21] [iqm503](https://github.com/igm503) contributed to support OpenCV (numpy) input format pre-processing. This change takes effect only when you're using Python API & numpy input for `remover.process()`. PIL input or command-line tool will be same as before.
+* [2024.02.22] [eafpres](https://github.com/eafpres) become a first sponsor for this project. Thank you for your support! 😄
+* [2024.02.23] `transparent-background` has been downloaded over 240,000 times!
 
 ## :inbox_tray: Installation
 
