@@ -5,6 +5,7 @@ import wget
 import gdown
 import torch
 import shutil
+import base64
 import warnings
 import importlib
 
@@ -15,6 +16,7 @@ import albumentations as A
 import albumentations.pytorch as AP
 
 from PIL import Image
+from io import BytesIO
 from packaging import version
 from easydict import EasyDict
 
@@ -247,14 +249,18 @@ class Remover:
         else:
             return Image.fromarray(img.astype(np.uint8))
 
+def to_base64(image):
+    buffered = BytesIO()
+    image.save(buffered, format="JPEG")
+    base64_img = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return base64_img
 
-def console():
+def entry_point(out_type, mode, device, ckpt, source, dest, jit, threshold, flet_progress=None, flet_page=None, preview=None, preview_out=None):
     warnings.filterwarnings("ignore")
 
-    args = parse_args()
-    remover = Remover(mode=args.mode, jit=args.jit, device=args.device, ckpt=args.ckpt, fast=args.fast if args.fast is True else None)
+    remover = Remover(mode=mode, jit=jit, device=device, ckpt=ckpt)
 
-    if args.source.isnumeric() is True:
+    if source.isnumeric() is True:
         save_dir = None
         _format = "Webcam"
         if importlib.util.find_spec('pyvirtualcam') is not None:
@@ -266,27 +272,27 @@ def console():
         else:
             raise ImportError("pyvirtualcam not found. Install with \"pip install transparent-background[webcam]\"")
 
-    elif os.path.isdir(args.source):
-        save_dir = os.path.join(os.getcwd(), args.source.split(os.sep)[-1])
-        _format = get_format(os.listdir(args.source))
+    elif os.path.isdir(source):
+        save_dir = os.path.join(os.getcwd(), source.split(os.sep)[-1])
+        _format = get_format(os.listdir(source))
 
-    elif os.path.isfile(args.source):
+    elif os.path.isfile(source):
         save_dir = os.getcwd()
-        _format = get_format([args.source])
+        _format = get_format([source])
 
     else:
-        raise FileNotFoundError("File or directory {} is invalid.".format(args.source))
+        raise FileNotFoundError("File or directory {} is invalid.".format(source))
 
-    if args.type == "rgba" and _format == "Video":
+    if out_type == "rgba" and _format == "Video":
         raise AttributeError("type 'rgba' cannot be applied to video input.")
 
-    if args.dest is not None:
-        save_dir = args.dest
+    if dest is not None:
+        save_dir = dest
 
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
 
-    loader = eval(_format + "Loader")(args.source)
+    loader = eval(_format + "Loader")(source)
     frame_progress = tqdm.tqdm(
         total=len(loader),
         position=1 if (_format == "Video" and len(loader) > 1) else 0,
@@ -303,17 +309,22 @@ def console():
         if (_format == "Video" and len(loader) > 1)
         else None
     )
+    if flet_progress is not None:
+        assert flet_page is not None
+        flet_progress.value = 0
+        flet_step = 1 / len(loader)
+
     writer = None
 
     for img, name in loader:
         frame_progress.set_description("{}".format(name))
-        if args.type.lower().endswith((".jpg", ".jpeg", ".png")):
+        if out_type.lower().endswith((".jpg", ".jpeg", ".png")):
             outname = "{}_{}".format(
                 os.path.splitext(name)[0],
-                os.path.splitext(os.path.split(args.type)[-1])[0],
+                os.path.splitext(os.path.split(out_type)[-1])[0],
             )
         else:
-            outname = "{}_{}".format(os.path.splitext(name)[0], args.type)
+            outname = "{}_{}".format(os.path.splitext(name)[0], out_type)
 
         if _format == "Video" and writer is None:
             writer = cv2.VideoWriter(
@@ -334,7 +345,7 @@ def console():
             writer = None
             continue
 
-        out = remover.process(img, type=args.type, threshold=args.threshold)
+        out = remover.process(img, type=out_type, threshold=threshold)
 
         if _format == "Image":
             out.save(os.path.join(save_dir, "{}.png".format(outname)))
@@ -349,5 +360,18 @@ def console():
                     "transparent-background", cv2.cvtColor(np.array(out), cv2.COLOR_BGR2RGB)
                 )
         frame_progress.update()
+        if flet_progress is not None:
+            flet_progress.value += flet_step
+
+            preview.src_base64 = to_base64(img.resize((200, 200)).convert('RGB'))
+            preview_out.src_base64 = to_base64(out.resize((200, 200)).convert('RGB'))
+            preview.update()
+            preview_out.update()
+        
+            flet_page.update()
 
     print("\nDone. Results are saved in {}".format(os.path.abspath(save_dir)))
+
+def console():
+    args = parse_args()
+    entry_point(args.type, args.mode, args.device, args.ckpt, args.source, args.dest, args.jit, args.threshold)
